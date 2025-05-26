@@ -91,7 +91,7 @@ class HiCQC(object):
         self.sample_type = sample_type.lower()
         self.qc_purpose = 'Unknown'
         self.lib_enzyme = lib_enzyme if lib_enzyme is not None else ['undefined']
-        self.ref_assembly = "reference assembly not found"
+        self.ref_assembly = "reference assembly not found or bwa-index was used"
         self.fwd_hic_reads = "forward Hi-C reads not found"
         self.rev_hic_reads = "reverse Hi-C reads not found"
 
@@ -313,15 +313,14 @@ class HiCQC(object):
             full_rev_reads = None
             for token in bwa_command_elements:
                 token_proc = token.strip().lower()
+                self.logger.info('Parsing bwa mem token: %s', token_proc)
                 if token_proc.endswith('.fasta') or token_proc.endswith('.fa') or token_proc.endswith('.fna') \
                     or token_proc.endswith('.fasta.gz') or token_proc.endswith('.fa.gz') or token_proc.endswith('fna.gz'):
                     self.ref_assembly = os.path.basename(token)
-                elif token_proc.endswith('_r1.fastq') or token_proc.endswith('_r1.fq') \
-                    or token_proc.endswith('_r1.fastq.gz') or token_proc.endswith('_r1.fq.gz'):
+                elif re.match(r"\S+(R1|r1|R_1|r_1)[\w\.]*\.f(ast)?q(.gz)?", token_proc) is not None:
                     self.fwd_hic_reads = os.path.basename(token)
                     full_fwd_reads = token.strip()
-                elif token_proc.endswith('_r2.fastq') or token_proc.endswith('_r2.fq') \
-                    or token_proc.endswith('_r2.fastq.gz') or token_proc.endswith('_r2.fq.gz'):
+                elif re.match(r"\S+(R2|r2|R_2|r_2)[\w\.]*\.f(ast)?q(.gz)?", token_proc) is not None:
                     self.rev_hic_reads = os.path.basename(token)
                     full_rev_reads = token.strip()
             files_matched = False
@@ -341,8 +340,11 @@ class HiCQC(object):
         else:
             self.bwa_command = 'BWA command not found'
 
-        if 'PG' in header and len(header['PG']) > 1 and 'samblaster ' in header['PG'][1]['CL']:
-            self.samblaster = header['PG'][1]['CL']
+        commands = [x['CL'] for x in header['PG'][1:]]
+        is_samblaster = [x for x in commands if 'samblaster ' in x]
+        
+        if len(is_samblaster) != 0:
+            self.samblaster = is_samblaster[0]
         else:
              self.samblaster = 'samblaster command not found'
 
